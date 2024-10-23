@@ -9,7 +9,8 @@ export type ColumnType =
   | 'select'
   | 'multiselect'
   | 'url'
-  | 'image';
+  | 'image'
+  | 'button';
 
 export interface CustomGridColumn extends Omit<GridColumn, 'id'> {
   title: string;
@@ -90,6 +91,24 @@ export const useTableColumns = () => {
       type: 'date',
       icon: GridColumnIcon.HeaderDate,
       width: 150,
+    },
+    {
+      id: 'actions',
+      title: 'Actions',
+      type: 'button',
+      icon: GridColumnIcon.HeaderEmoji,
+      width: 100,
+      // icon: GridColumnIcon.HeaderMenu,
+      // width: 100,
+      // renderer: (props: any) => (
+      //   <Button
+      //     onClick={() => props.onActionClick(props.row)}
+      //     variant="ghost"
+      //     size="sm"
+      //   >
+      //     View Details
+      //   </Button>
+      // ),
     },
   ]);
   const [newColumnName, setNewColumnName] = useState('');

@@ -11,9 +11,11 @@ import {
   GridColumn,
   GridSelection,
   CompactSelection,
+  GridDragEventArgs,
 } from '@glideapps/glide-data-grid';
 import { CustomGridColumn } from '../../hooks/use-table-columns';
 import { Button } from '../ui/button';
+import { Sheet, SheetContent } from '../ui/sheet';
 
 const useEventListener = (
   eventName: string,
@@ -70,6 +72,7 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
       )
     );
   }, [data, searchValue]);
+  const [selectedRow, setSelectedRow] = useState<any | null>(null);
 
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
@@ -97,7 +100,20 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
           readonly: false,
         };
       }
-
+      if (column.type === 'button') {
+        return {
+          kind: GridCellKind.Custom,
+          allowOverlay: false,
+          copyData: 'View Details',
+          data: {
+            kind: 'button-cell',
+            onClick: () => {
+              setSelectedRow(item);
+              console.log('clicked', item);
+            },
+          },
+        };
+      }
       switch (column.type) {
         case 'boolean':
           return {
@@ -114,16 +130,7 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
             allowOverlay: true,
             readonly: false,
           };
-        // case 'date':
-        //   return {
-        //     kind: GridCellKind.Number,
-        //     data: cellData ? new Date(cellData) : undefined,
-        //     displayData: cellData
-        //       ? new Date(cellData).toLocaleDateString()
-        //       : '',
-        //     allowOverlay: true,
-        //     readonly: false,
-        //   };
+
         case 'url':
           return {
             kind: GridCellKind.Uri,
@@ -198,28 +205,36 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
   );
 
   const customRenderers = useCallback((): readonly CustomRenderer[] => {
-    const bubbleRenderer: CustomRenderer<any> = {
-      kind: GridCellKind.Bubble,
+    const buttonRenderer: CustomRenderer<any> = {
+      kind: GridCellKind.Custom,
       isMatch: (cell: GridCell): cell is GridCell =>
-        cell.kind === GridCellKind.Bubble,
+        (cell as any)?.data?.kind === 'button-cell',
       draw: (args, cell) => {
-        // Default drawing behavior
-        return false;
+        const { ctx, theme, rect } = args;
+        const { x, y, width, height } = rect;
+
+        ctx.fillStyle = theme.bgCell;
+        ctx.fillRect(x, y, width, height);
+
+        ctx.fillStyle = theme.textDark;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('View Details', x + width / 2, y + height / 2);
+
+        return true;
       },
       onClick: (args) => {
-        // Custom click behavior if needed
-        return false;
-      },
-      onPaste: (value, cellData) => {
-        return {
-          ...cellData,
-          data: value.split(',').map((v) => v.trim()),
-        };
+        const cell = args.cell as any;
+        if (cell.data?.onClick) {
+          cell.data.onClick();
+        }
+        return true;
       },
     };
 
-    return [bubbleRenderer];
+    return [buttonRenderer];
   }, []);
+
   useEventListener(
     'keydown',
     useCallback((event: KeyboardEvent) => {
@@ -251,18 +266,41 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
     // Perform any action with the selected data here
   }, [getSelectedRowsData]);
 
+  const [dragRow, setDragRow] = useState<number | undefined>(undefined);
+
+  const onRowMoved = useCallback(
+    (startIndex: number, endIndex: number) => {
+      const newData = [...data];
+      const [movedItem] = newData.splice(startIndex, 1);
+      newData.splice(endIndex, 0, movedItem);
+      setData(newData);
+    },
+    [data, setData]
+  );
+
+  const onDragStart = useCallback((args: GridDragEventArgs) => {
+    if (args.location) {
+      setDragRow(args.location[1]);
+    }
+  }, []);
+
+  const onDragEnd = useCallback(
+    (args: GridDragEventArgs) => {
+      if (dragRow !== undefined && args.location) {
+        const endRow = args.location[1];
+        onRowMoved(dragRow, endRow);
+      }
+      setDragRow(undefined);
+    },
+    [dragRow, onRowMoved]
+  );
+
   if (!data || !columns) {
-    return null; // or return a loading indicator
+    return null;
   }
 
   return (
     <>
-      {/* <Button
-        onClick={handleSelectedRowsAction}
-        disabled={gridSelection.rows.length === 0}
-      >
-        Action on Selected Rows
-      </Button> */}
       <StyledEditor
         searchResults={[]}
         getCellsForSelection={true}
@@ -301,7 +339,17 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
         gridSelection={gridSelection}
         onGridSelectionChange={onSelectionChanged}
         rowSelect="multi"
+        onRowMoved={onRowMoved}
+        onDragStart={onDragStart}
+        // onDragEnd={onDragEnd}
+        rowHeight={35}
+        rowMarkerWidth={50}
+        rowMarkerStartIndex={1}
+        onHeaderMenuClick={() => {}}
       />
+      <Sheet open={!!selectedRow} onOpenChange={() => setSelectedRow(null)}>
+        <SheetContent>SS</SheetContent>
+      </Sheet>
     </>
   );
 };

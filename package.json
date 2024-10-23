@@ -5,6 +5,7 @@
   "dependencies": {
     "@glideapps/glide-data-grid": "^6.0.3",
     "@glideapps/glide-data-grid-source": "^6.0.3",
+    "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.0",
     "@supabase/supabase-js": "^2.45.6",
     "@testing-library/jest-dom": "^5.17.0",

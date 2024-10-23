@@ -37,7 +37,7 @@ const Table: React.FC = () => {
   }, []);
 
   return (
-    <>
+    <div className="  mx-8">
       <TableContainer>
         <ControlPanel
           newColumnName={newColumnName}
@@ -58,7 +58,7 @@ const Table: React.FC = () => {
       </TableContainer>
 
       {ReactDOM.createPortal(null, document.body)}
-    </>
+    </div>
   );
 };
 
