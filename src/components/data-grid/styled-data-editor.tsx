@@ -16,6 +16,13 @@ import {
 import { CustomGridColumn } from '../../hooks/use-table-columns';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent } from '../ui/sheet';
+import { MultiselectOverlay } from '../multi-select-overlay';
+
+type MultiselectCellData = {
+  kind: 'multiselect-cell';
+  options: string[];
+  selected: string[];
+};
 
 const useEventListener = (
   eventName: string,
@@ -30,8 +37,41 @@ const useEventListener = (
   }, [eventName, handler, element]);
 };
 
+const ScrollableContainer = styled.div`
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+
+  /* Webkit browsers like Chrome, Safari */
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+`;
 const StyledEditor = styled(DataEditor)`
   width: 100%;
+  border: 1px solid ${(props) => props.theme.borderColor};
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: ${(props) => props.theme.fontFamily};
 `;
 
 interface StyledDataEditorProps {
@@ -52,7 +92,7 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
-    console.log(`Resizing column: ${column.id} to ${newSize}`);
+    // console.log(`Resizing column: ${column.id} to ${newSize}`);
     setColumnSizes((prev) => ({ ...prev, [column.id as string]: newSize }));
   }, []);
 
@@ -145,14 +185,26 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
         //     allowOverlay: true,
         //     readonly: false,
         //   };
-        case 'select':
+
         case 'multiselect':
-          const bubbleData = Array.isArray(cellData) ? cellData : [cellData];
+          // console.log('Returning multiselect cell');
+          const options = column.options || [];
+          const selectedValues = Array.isArray(cellData)
+            ? cellData
+            : [cellData];
           return {
-            kind: GridCellKind.Bubble,
-            data: bubbleData,
+            kind: GridCellKind.Custom,
             allowOverlay: true,
-            // readonly: false,
+            copyData: selectedValues.join(', '),
+            readonly: false,
+            themeOverride: {
+              bgCell: '#f0f0f0', // This will make the cell visually distinct
+            },
+            data: {
+              kind: 'multiselect-cell',
+              options: options,
+              selected: selectedValues,
+            } as MultiselectCellData,
           };
         default:
           return {
@@ -169,39 +221,30 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
 
   const onCellEdited = useCallback(
     ([col, row]: Item, newValue: EditableGridCell): void => {
-      if (!filteredData || row >= filteredData.length || col >= columns.length)
-        return;
-
       const newData = [...data];
-      const filteredIndex = data.indexOf(filteredData[row]);
+      const filteredIndex = filteredData.findIndex(
+        (item) => item.id === newData[row].id
+      );
       const column = columns[col];
 
-      switch (newValue.kind) {
-        case GridCellKind.Text:
-        case GridCellKind.Number:
-        case GridCellKind.Uri:
-        case GridCellKind.Boolean:
-        case GridCellKind.Image:
-          newData[filteredIndex] = {
-            ...newData[filteredIndex],
-            [column.id]: newValue.data,
-          };
-          break;
-        case GridCellKind.Custom:
-          if (column.type === 'multiselect' || column.type === 'select') {
-            newData[filteredIndex] = {
-              ...newData[filteredIndex],
-              [column.id]: newValue.data,
-            };
-          }
-          break;
-        default:
-          console.warn(`Unhandled cell kind: ${newValue.kind}`);
+      if (
+        column.type === 'multiselect' &&
+        newValue.kind === GridCellKind.Custom &&
+        (newValue.data as MultiselectCellData).kind === 'multiselect-cell'
+      ) {
+        const multiselectData = newValue.data as MultiselectCellData;
+        newData[filteredIndex] = {
+          ...newData[filteredIndex],
+          [column.id]: multiselectData.selected,
+        };
+      } else {
+        // Handle other cell types
+        // ...
       }
 
       setData(newData);
     },
-    [filteredData, data, columns, setData]
+    [data, filteredData, columns, setData]
   );
 
   const customRenderers = useCallback((): readonly CustomRenderer[] => {
@@ -232,7 +275,68 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
       },
     };
 
-    return [buttonRenderer];
+    const multiselectRenderer: CustomRenderer<any> = {
+      kind: GridCellKind.Custom,
+      isMatch: (cell: GridCell): cell is GridCell => {
+        const isMatch = (cell as any)?.data?.kind === 'multiselect-cell';
+
+        return isMatch;
+      },
+      draw: (args, cell) => {
+        // console.log('draw called', cell);
+        const { ctx, theme, rect } = args;
+        const { x, y, width, height } = rect;
+        const { selected } = cell.data;
+
+        // Draw background
+        ctx.fillStyle = theme.bgCell;
+        ctx.fillRect(x, y, width, height);
+
+        // Draw selected values
+        ctx.fillStyle = theme.textDark;
+        ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const text = selected.join(', ');
+        ctx.fillText(text, x + 8, y + height / 2, width - 16);
+
+        // Draw dropdown indicator
+        ctx.fillStyle = theme.textMedium;
+        ctx.beginPath();
+        ctx.moveTo(x + width - 16, y + height / 2 - 3);
+        ctx.lineTo(x + width - 10, y + height / 2 - 3);
+        ctx.lineTo(x + width - 13, y + height / 2 + 2);
+        ctx.closePath();
+        ctx.fill();
+
+        return true;
+      },
+
+      onClick: (args) => {
+        console.log('onClick called', args);
+        args.preventDefault();
+
+        return true;
+      },
+      provideEditor: (cell) => {
+        console.log('provideEditor called', cell);
+        const { options, selected } = cell.data;
+        return (props) => (
+          <MultiselectOverlay
+            options={options}
+            selected={selected}
+            onFinishedEditing={(newValue) => {
+              console.log('onFinishedEditing called');
+              props.onFinishedEditing(newValue);
+            }}
+          />
+        );
+      },
+    };
+
+    const renderers = [buttonRenderer, multiselectRenderer];
+
+    return renderers;
   }, []);
 
   useEventListener(
@@ -262,7 +366,7 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
 
   const handleSelectedRowsAction = useCallback(() => {
     const selectedData = getSelectedRowsData();
-    console.log('Selected rows data:', selectedData);
+    // console.log('Selected rows data:', selectedData);
     // Perform any action with the selected data here
   }, [getSelectedRowsData]);
 
@@ -303,6 +407,8 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
     <>
       <StyledEditor
         searchResults={[]}
+        smoothScrollX={true}
+        smoothScrollY={true}
         getCellsForSelection={true}
         searchValue={searchValue}
         onSearchValueChange={setSearchValue}
@@ -311,18 +417,31 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
           setShowSearch(false);
           setSearchValue('');
         }}
+        rowHeight={40}
+        headerHeight={48}
+        rowMarkerWidth={40}
         getCellContent={getCellContent}
         columns={columnsWithSizes}
         rows={filteredData.length}
         onCellEdited={onCellEdited}
         rowMarkers="both"
         editOnType
-        smoothScrollY={true}
-        height={filteredData.length * 35 + 40}
+        verticalBorder={true}
+        height={filteredData.length * 35 + 100}
         width="100%"
         theme={theme}
         customRenderers={customRenderers()}
         onColumnResize={onColumnResize}
+        onCellActivated={(cell) => {
+          console.log('Cell activated:', cell);
+          const [col, row] = cell;
+          const column = columns[col];
+          if (column.type === 'multiselect' || column.type === 'select') {
+            console.log('Activating multiselect cell');
+            return true; // This will open the overlay for multiselect cells
+          }
+          return false; // Don't open overlay for other cell types
+        }}
         rightElement={
           <Button
             variant="ghost"
@@ -342,8 +461,7 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
         onRowMoved={onRowMoved}
         onDragStart={onDragStart}
         // onDragEnd={onDragEnd}
-        rowHeight={35}
-        rowMarkerWidth={50}
+
         rowMarkerStartIndex={1}
         onHeaderMenuClick={() => {}}
       />
