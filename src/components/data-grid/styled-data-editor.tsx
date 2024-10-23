@@ -22,6 +22,7 @@ type MultiselectCellData = {
   kind: 'multiselect-cell';
   options: string[];
   selected: string[];
+  allowCreation: boolean;
 };
 
 const useEventListener = (
@@ -187,23 +188,17 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
         //   };
 
         case 'multiselect':
-          // console.log('Returning multiselect cell');
           const options = column.options || [];
-          const selectedValues = Array.isArray(cellData)
-            ? cellData
-            : [cellData];
+          const selectedValues = item[column.id] || [];
           return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
             copyData: selectedValues.join(', '),
-            readonly: false,
-            themeOverride: {
-              bgCell: '#f0f0f0', // This will make the cell visually distinct
-            },
             data: {
               kind: 'multiselect-cell',
               options: options,
               selected: selectedValues,
+              allowCreation: true,
             } as MultiselectCellData,
           };
         default:
@@ -277,13 +272,10 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
 
     const multiselectRenderer: CustomRenderer<any> = {
       kind: GridCellKind.Custom,
-      isMatch: (cell: GridCell): cell is GridCell => {
-        const isMatch = (cell as any)?.data?.kind === 'multiselect-cell';
-
-        return isMatch;
-      },
+      isMatch: (cell: any): cell is any =>
+        cell.kind === GridCellKind.Custom &&
+        (cell.data as any).kind === 'multiselect-cell',
       draw: (args, cell) => {
-        // console.log('draw called', cell);
         const { ctx, theme, rect } = args;
         const { x, y, width, height } = rect;
         const { selected } = cell.data;
@@ -292,43 +284,59 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
         ctx.fillStyle = theme.bgCell;
         ctx.fillRect(x, y, width, height);
 
-        // Draw selected values
-        ctx.fillStyle = theme.textDark;
+        // Draw tags
+        const padding = 4;
+        const tagHeight = height - 2 * padding;
+        const tagSpacing = 4;
+        let currentX = x + padding;
+
         ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        const text = selected.join(', ');
-        ctx.fillText(text, x + 8, y + height / 2, width - 16);
 
-        // Draw dropdown indicator
-        ctx.fillStyle = theme.textMedium;
-        ctx.beginPath();
-        ctx.moveTo(x + width - 16, y + height / 2 - 3);
-        ctx.lineTo(x + width - 10, y + height / 2 - 3);
-        ctx.lineTo(x + width - 13, y + height / 2 + 2);
-        ctx.closePath();
-        ctx.fill();
+        selected.forEach((value: string, index: number) => {
+          const tagWidth = ctx.measureText(value).width + 10;
+
+          if (currentX + tagWidth > x + width - padding) {
+            // If there's not enough space, draw ellipsis and stop
+            ctx.fillStyle = theme.textMedium;
+            ctx.fillText('...', currentX, y + height / 2);
+            return;
+          }
+
+          // Draw tag background
+          ctx.fillStyle = theme.bgBubble;
+          ctx.beginPath();
+          ctx.roundRect(currentX, y + padding, tagWidth, tagHeight, 4);
+          ctx.fill();
+
+          // Draw tag text
+          ctx.fillStyle = theme.textDark;
+          ctx.fillText(value, currentX + 5, y + height / 2);
+
+          currentX += tagWidth + tagSpacing;
+        });
 
         return true;
       },
-
-      onClick: (args) => {
-        console.log('onClick called', args);
-        args.preventDefault();
-
-        return true;
-      },
+      onClick: () => true,
       provideEditor: (cell) => {
-        console.log('provideEditor called', cell);
-        const { options, selected } = cell.data;
+        console.log('Providing editor for multiselect cell', cell);
         return (props) => (
           <MultiselectOverlay
-            options={options}
-            selected={selected}
+            options={cell.data.options}
+            selected={cell.data.selected}
             onFinishedEditing={(newValue) => {
-              console.log('onFinishedEditing called');
-              props.onFinishedEditing(newValue);
+              console.log('Finished editing multiselect', newValue);
+              props.onFinishedEditing({
+                ...cell,
+                data: {
+                  ...cell.data,
+                  selected: newValue,
+                },
+              });
             }}
+            // allowCreation={cell.data.allowCreation}
           />
         );
       },
@@ -436,9 +444,10 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
           console.log('Cell activated:', cell);
           const [col, row] = cell;
           const column = columns[col];
+          console.log('Column type:', column.type);
           if (column.type === 'multiselect' || column.type === 'select') {
-            console.log('Activating multiselect cell');
-            return true; // This will open the overlay for multiselect cells
+            console.log('Activating multiselect/select cell');
+            return true; // This will open the overlay for multiselect/select cells
           }
           return false; // Don't open overlay for other cell types
         }}

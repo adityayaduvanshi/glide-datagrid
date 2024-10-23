@@ -10,7 +10,8 @@ export type ColumnType =
   | 'multiselect'
   | 'url'
   | 'image'
-  | 'button';
+  | 'button'
+  | 'uri';
 
 export interface CustomGridColumn extends Omit<GridColumn, 'id'> {
   title: string;
@@ -29,7 +30,7 @@ export const useTableColumns = () => {
       icon: GridColumnIcon.HeaderString,
       width: 150,
     },
-    { id: 'url', title: 'URL', type: 'url', icon: GridColumnIcon.HeaderUri },
+    { id: 'url', title: 'URL', type: 'uri', icon: GridColumnIcon.HeaderUri },
     {
       id: 'logo',
       title: 'Logo',
