@@ -17,6 +17,7 @@ import { CustomGridColumn } from '../../hooks/use-table-columns';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent } from '../ui/sheet';
 import { MultiselectOverlay } from '../multi-select-overlay';
+import EditItemForm from '../edit-form';
 
 type MultiselectCellData = {
   kind: 'multiselect-cell';
@@ -466,7 +467,18 @@ export const StyledDataEditor: React.FC<StyledDataEditorProps> = ({
         onHeaderMenuClick={() => {}}
       />
       <Sheet open={!!selectedRow} onOpenChange={() => setSelectedRow(null)}>
-        <SheetContent>SS</SheetContent>
+        <SheetContent>
+          {selectedRow && (
+            <EditItemForm
+              data={selectedRow}
+              onSave={(updatedData) => {
+                // Handle saving the updated data
+                console.log('Updated data:', updatedData)
+                setSelectedRow(null)
+              }}
+            />
+          )}
+        </SheetContent>
       </Sheet>
     </>
   );
